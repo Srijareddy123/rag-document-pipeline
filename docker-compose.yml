@@ -1,0 +1,51 @@
+# API plus a ChromaDB server. Runs offline with local embeddings, no API keys.
+#
+#   docker compose up -d --build
+#   docker compose exec api python scripts/ingest_documents.py
+#   curl -s -X POST localhost:8000/api/v1/query -H 'Content-Type: application/json' \
+#        -d '{"query": "how does HNSW indexing work", "n_results": 3}'
+#
+# Change the host ports with API_PORT and CHROMA_PORT if 8000 or 8001 are taken.
+
+services:
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    ports:
+      - "${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - EMBEDDING_PROVIDER=local
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - CHROMA_COLLECTION=documents
+      - CHUNK_STRATEGY=fixed
+      - EMBED_BATCH_SIZE=32
+      - LOG_LEVEL=INFO
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  chroma_data:

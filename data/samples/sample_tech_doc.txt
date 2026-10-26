@@ -1,0 +1,72 @@
+Vector Databases: A Practical Guide for Production Systems
+
+Introduction
+
+Vector databases have become a core infrastructure component for retrieval applications. Unlike traditional relational databases that index structured data, vector databases store and query high-dimensional numerical representations, embeddings, produced by machine learning models.
+
+This guide covers the operational considerations for running vector databases in production, focusing on ChromaDB, Pinecone, and Weaviate.
+
+What Is an Embedding?
+
+An embedding is a fixed-length array of floating-point numbers that encodes the semantic meaning of content. Two pieces of text with similar meaning will have embeddings that are geometrically close in the high-dimensional space. This property is what makes similarity search possible.
+
+For example, the sentence "How do I reset my password?" and "Steps to recover account access" will have embeddings within a small cosine distance of each other, even though they share no exact words. A keyword search would miss this relationship entirely.
+
+Embedding Dimensions
+
+The number of dimensions in an embedding vector is a key parameter:
+
+- 384 dimensions: all-MiniLM-L6-v2 (sentence-transformers). Fast, small, good for most tasks.
+- 768 dimensions: BERT-base. Classic choice, widely supported.
+- 1024 dimensions: Amazon Titan Embeddings V2. Used in production AWS deployments.
+- 1536 dimensions: OpenAI text-embedding-ada-002. High quality, third-party dependency.
+
+Higher dimensions generally improve recall but increase storage and query latency.
+
+HNSW: The Index Structure That Makes Vector Search Fast
+
+Most vector databases use Hierarchical Navigable Small World (HNSW) graphs for approximate nearest neighbor (ANN) search. HNSW trades exact results for massive speed improvements, queries that would take minutes with brute-force search complete in milliseconds.
+
+Key HNSW parameters:
+- ef_construction: Controls index quality during build. Higher = better recall, slower build. Default 100 is usually fine.
+- M: Number of bidirectional links per node. Higher = better recall, more memory. Default 16 works well under 1M vectors.
+- ef: Query-time search width. Higher = better recall, slower query. Tune based on your latency budget.
+
+ChromaDB defaults are conservative and appropriate for most workloads under 500K vectors.
+
+Chunking Strategy
+
+Documents must be split into chunks before embedding because:
+1. Embedding models have token limits (typically 512 tokens)
+2. Smaller chunks produce more precise retrieval
+3. Too-small chunks lose context; too-large chunks dilute relevance
+
+Common strategies:
+
+Fixed-size chunking splits documents into equal character or token windows with overlap. Simple, predictable, works well for structured content.
+
+Semantic chunking splits on sentence or paragraph boundaries, then merges fragments. Produces variable-length chunks aligned with natural content boundaries. Better for prose-heavy documents.
+
+The overlap window (typically 10-20% of chunk size) prevents hard boundaries from splitting relevant context across two chunks.
+
+Operational Considerations
+
+Persistence: ChromaDB's PersistentClient writes to disk in SQLite + binary format. Suitable for single-node deployments. For multi-node, use ChromaDB's HTTP server mode.
+
+Memory: HNSW index is loaded fully into RAM. Budget approximately 100 bytes per vector per dimension. A 500K vector collection at 384 dimensions requires ~19GB RAM if fully loaded.
+
+Batch upsert limits: ChromaDB has a practical limit of ~5000 items per upsert due to SQLite parameter count limits. The pipeline chunks upserts automatically.
+
+Backup: For ChromaDB, backing up the persist directory is sufficient. No WAL complexity.
+
+Known Production Issues
+
+1. Container restart during ingestion: ChromaDB holds an exclusive lock on the persist directory. If the container restarts mid-batch, you may get partial writes. The pipeline's retry logic re-runs failed batches, but duplicate chunk IDs are handled by upsert semantics (overwrite, not append).
+
+2. Memory growth during bulk ingestion: The HNSW index grows in memory as documents are added. For ingestion runs over 1M vectors, monitor RSS and consider restarting the ChromaDB server between large batches.
+
+3. Query latency under load: HNSW queries are single-threaded in ChromaDB's current implementation. For high-QPS production use, run multiple ChromaDB instances behind a load balancer or migrate to a managed solution.
+
+Conclusion
+
+ChromaDB is the right tool for getting a vector retrieval system running quickly in a controlled environment. It handles persistence, cosine similarity, and metadata filtering out of the box with no managed infrastructure. For production systems beyond ~5M vectors or >100 QPS, evaluate Pinecone Serverless or Weaviate Cloud.

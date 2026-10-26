@@ -1,0 +1,26 @@
+{
+  "command": "/usr/bin/time -l python scripts/load_test.py --n 50000 --strategy fixed",
+  "corpus": "Simple English Wikipedia, 20231101 (wikimedia/wikipedia on Hugging Face)",
+  "strategy": "fixed",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "documents_read": 50000,
+  "documents_accepted": 49499,
+  "documents_rejected": 501,
+  "rejected_by_check": {
+    "not_empty": 33,
+    "has_readable_text": 468
+  },
+  "chunks_stored": 125136,
+  "chunks_in_store": 125136,
+  "text_megabytes": 77.7,
+  "wall_seconds": 694.6,
+  "docs_per_second": 72.0,
+  "chunks_per_second": 180.1,
+  "embed_seconds": 551.9,
+  "store_seconds": 137.7,
+  "peak_rss_mb": 749,
+  "query_latency_ms_p50": 11.9,
+  "query_latency_ms_p95": 15.7,
+  "queries_timed": 100,
+  "machine": "arm64 Darwin, Python 3.13.12"
+}

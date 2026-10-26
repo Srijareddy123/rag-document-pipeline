@@ -1,0 +1,80 @@
+meeting notes - Q3 arch review - Oct 14 2024
+
+attendees: dana, sam, lee, omar
+
+ACTION ITEMS FROM LAST MEETING
+- omar was supposed to finish the bedrock IAM role before this meeting. not done yet
+- lee: chroma upgrade to 0.5, done!
+- dana: benchmark embedding models, done (see attached spreadsheet, ask dana for link)
+
+AGENDA
+
+1. chunking strategy decision
+we tested both fixed and semantic. semantic is better for legal docs, fixed is fine for
+everything else we have. decision: default to fixed, expose chunk_strategy param in the API
+so callers can override per request. sam will document this in the API schema.
+
+open question: do we need sliding window on top of fixed? lee says the overlap param
+handles this already. agreed, close the issue.
+
+2. chroma vs pinecone
+we looked at pinecone serverless pricing. at our expected doc volume (~50K) and query rate
+(~200 req/day during business hours) it's actually cheaper than running chroma on ECS
+because we can shut down the container overnight. BUT: we're not doing that right now,
+and chroma gives us better offline dev experience. decision: stay with chroma for now,
+revisit if we hit 500K docs or >1000 QPS.
+
+omar raised concern about chroma single-threaded queries. agreed it's a real constraint.
+noted in README known limitations.
+
+3. retry logic
+dana added exponential backoff with full jitter. 3 attempts, 2s base delay.
+omar asked why 3 and not 5. answer: failing fast is better than queueing retries that
+block the rest of the batch for 5 minutes. if a doc fails 3 times it goes to the dead letter
+list and we move on.
+
+TODO: add dead letter queue alerting. right now it's just a log line.
+TODO: maybe add a webhook callback on batch complete so callers know when async ingestion is done
+
+4. data quality checks
+
+current checks:
+- min length (50 chars)
+- alpha ratio (at least 40% alphabetic characters)
+- no null bytes
+- no replacement characters (encoding garbage)
+- exact duplicate detection via SHA-256 fingerprint
+
+lee asked about near-duplicate detection. agreed we should add it but it's not blocking.
+cosine similarity of embeddings would work but is expensive pre-embed. minhash LSH would
+be fast but another dependency. deferred to backlog.
+
+5. testing strategy
+
+unit tests cover: chunkers, quality checker, retry logic
+integration tests: need a real chroma instance, we use the in-memory client in tests
+no e2e tests yet. TODO add e2e with docker compose in CI.
+
+6. misc
+
+sam: README needs to be clearer about local vs production setup. readers shouldn't
+have to figure out which env vars to set. dana will update.
+
+lee: sentence-transformers model download happens at container start, not build time.
+this is fine for local dev but will slow down cold starts in production. consider
+baking the model into the Docker image for prod. not doing this now.
+
+omar: add .env.example before making this public
+
+NEXT MEETING
+oct 28, same time. omar: please finish the IAM role before then.
+
+----
+
+random notes (not reviewed)
+- all-MiniLM-L6-v2 is 90MB, downloads in like 20 seconds on office wifi
+- chroma 0.5 changed the PersistentClient API slightly, lee had to update the import
+- bedrock costs: $0.00002 per 1K input tokens for titan embed v2. at 50K docs with avg
+  500 tokens per doc = 25M tokens = $0.50 per full re-index. not bad.
+- local sentence-transformers: ~500 chunks/sec on macbook m2. bedrock: ~20 req/sec with
+  serial calls (haven't tried async yet). need to add async embedding support.

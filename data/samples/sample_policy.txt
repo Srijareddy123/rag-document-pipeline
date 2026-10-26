@@ -1,0 +1,132 @@
+Data Retention and Privacy Policy, Internal Engineering Reference
+Version 2.3 | Last reviewed: Q3 2024
+
+IMPORTANT NOTE: This is a sample document for testing the RAG pipeline.
+It is intentionally written with some formatting inconsistencies and
+redundancy to test the quality checker and chunking behavior on real-world
+policy documents, which are often messy in practice.
+
+---
+
+1. SCOPE AND PURPOSE
+
+This policy applies to all data processed, stored, or transmitted by engineering
+systems within the organization. It covers: customer data, internal metrics,
+logs, model training data, and vector embeddings derived from any of the above.
+
+The purpose of this policy is to define retention periods, deletion procedures,
+and access controls that align with applicable data protection regulations
+including GDPR, CCPA, and SOC 2 Type II requirements.
+
+Engineering teams are responsible for implementing these controls in their
+respective systems. Compliance is verified during annual security reviews.
+
+2. DATA CLASSIFICATION
+
+All data must be classified into one of four categories before storage:
+
+Class 1, Public: Data that is intentionally made public or carries no
+confidentiality expectation. No retention limits. Examples: product documentation,
+public API schemas, anonymized benchmarks.
+
+Class 2, Internal: Data intended for internal use only. Retain for 3 years
+after last access. Examples: internal wikis, engineering runbooks, non-PII
+metrics.
+
+Class 3, Confidential: Data that would cause harm if disclosed. Retain for
+1 year after last use, then delete. Examples: customer PII, API keys, access logs
+with IP addresses.
+
+Class 4, Restricted: Highest sensitivity. Retain only as long as operationally
+required, maximum 90 days. Requires explicit approval for any retention beyond
+30 days. Examples: security incident data, authentication tokens, encryption keys.
+
+3. VECTOR EMBEDDINGS, SPECIAL HANDLING
+
+Vector embeddings require specific handling because:
+(a) Embeddings derived from Class 3 or Class 4 data inherit that classification
+(b) Embedding models can sometimes be inverted to recover approximate source content
+(c) Bulk embedding collections may reveal statistical patterns about source data
+
+Requirements for embedding storage:
+- Document the source classification for all embedding collections
+- Apply the source document's retention policy to its derived embeddings
+- Delete embedding collections when the underlying documents are deleted
+- Do not use Class 3/4 source data for model fine-tuning without explicit legal review
+
+The RAG pipeline in this repository operates on Class 1 and Class 2 data only
+during development. Production deployments handling Class 3 data must complete
+a data impact assessment before go-live.
+
+4. RETENTION SCHEDULE
+
+System logs: 90 days rolling. Compressed archive for 1 year. Delete after 1 year.
+API access logs: 30 days. No archive. Auto-deleted.
+Model inference logs: 7 days. No archive. Auto-deleted.
+Vector store snapshots: Retained for 30 days. Weekly snapshots, daily after 7 days.
+Customer documents (Class 3): Deleted 30 days after customer account closure.
+Training datasets: Retain for duration of model version + 2 years.
+
+5. DELETION PROCEDURES
+
+5.1 Soft Delete
+
+For operational data, prefer soft delete (mark as deleted, retain for 30 days)
+to support accidental deletion recovery. Hard delete must occur by day 31.
+
+5.2 Vector Store Deletion
+
+ChromaDB does not support per-vector deletion with guaranteed storage reclaim.
+To delete a document from the vector store:
+1. Delete all chunk IDs associated with the document (collection.delete(ids=[...]))
+2. Verify with collection.get(ids=[...]) returns empty
+3. Note: Storage may not be reclaimed until the next compaction (ChromaDB 0.5+)
+
+For bulk deletion (e.g., customer account closure), delete and recreate the
+collection rather than deleting individual IDs, it is faster and guarantees
+clean storage reclaim.
+
+5.3 Embedding Model Deprecation
+
+When an embedding model is deprecated:
+1. Re-embed all active collections with the new model before decommissioning
+2. Run parallel queries with both models for 2 weeks to validate retrieval parity
+3. Delete old embeddings after validation is complete
+4. Update EMBEDDING_MODEL_VERSION in deployment config
+
+6. ACCESS CONTROLS
+
+Vector store access must be controlled at the collection level. Do not use a
+single collection for data of mixed classification. Separate collections by
+classification so access policies can be applied independently.
+
+Production ChromaDB instances must be:
+- Not publicly accessible (VPC-private only)
+- Authenticated via mTLS or IAM-based access (if using managed service)
+- Backed up daily with encrypted snapshots
+
+7. INCIDENT RESPONSE
+
+If a data breach involving stored embeddings is suspected:
+1. Immediately notify the security team (security@example.com)
+2. Do not delete any data until the security team has assessed scope
+3. Identify affected collections and their source document classifications
+4. Prepare a list of all IDs in affected collections for legal review
+
+The RAG pipeline logs all ingestion and query operations. Log retention for
+incident investigation is 90 days by default, extend to 1 year if a formal
+investigation is opened.
+
+8. KNOWN GAPS (as of Q3 2024)
+
+The following items are known policy gaps being tracked for resolution:
+
+- No automated enforcement of per-collection retention periods in ChromaDB
+  (tracked: ENG-4421, target: Q1 2025)
+- Embedding inversion risk not formally assessed for current models
+  (tracked: SEC-892, target: Q4 2024)
+- No automated notification when a collection exceeds its retention period
+  (tracked: ENG-4422, depends on ENG-4421)
+
+Teams relying on this pipeline for Class 3 data must implement manual retention
+controls until these gaps are closed.
