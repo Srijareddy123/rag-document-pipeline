@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help install demo test lint eval loadtest compare corpus up down ingest query clean
 
-PY ?= python3
+VENV ?= .venv
+PY ?= $(shell [ -x $(VENV)/bin/python ] && echo $(VENV)/bin/python || echo python3)
 Q ?= what is a vector database
 STRATEGY ?= fixed
 N ?= 50000
@@ -11,8 +12,9 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-install: ## Install dependencies
-	pip install -r requirements-dev.txt
+install: ## Create .venv (Python 3.12 or 3.13) and install dependencies
+	python3.13 -m venv $(VENV)
+	$(VENV)/bin/python -m pip install -r requirements-dev.txt
 
 demo: ## Run the whole pipeline on the sample data (offline, no API keys)
 	$(PY) scripts/demo.py
@@ -21,7 +23,7 @@ test: ## Run the tests
 	$(PY) -m pytest -q
 
 lint: ## Lint with ruff
-	ruff check .
+	$(PY) -m ruff check .
 
 eval: ## Chunking comparison (fixed vs semantic vs recursive), needs the corpus
 	$(PY) scripts/compare_chunking.py --docs 3000 --queries 1000

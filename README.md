@@ -22,10 +22,10 @@ make loadtest   # /usr/bin/time -l python scripts/load_test.py --n 50000 --strat
 | Articles read | 50,000 (49,499 accepted, 501 rejected: 468 mostly symbols or numbers, 33 too short) |
 | Chunks stored | 125,136 |
 | Wall time | 695 s (11.6 min), 72 articles per second, 180 chunks per second |
-| Peak memory | 749 MB resident (`/usr/bin/time -l`), 2.0 GB macOS footprint |
+| Peak memory | 749 MB resident (`/usr/bin/time -l`) |
 | Query latency, top 5 | p50 11.9 ms, p95 15.7 ms (100 queries, after loading) |
 
-Machine: Apple M4, 16 GB, shared with other jobs while it ran; the embedding model ran on the Apple GPU (MPS). Earlier runs of the same command took 585 s and 816 s, so treat the time as one measurement, not a constant. I did not measure a CPU-only run.
+Machine: Apple M4, 16 GB, shared with other jobs; embeddings ran on the Apple GPU (MPS). Earlier runs took 585 s and 816 s, so the time is one measurement. No CPU-only run.
 
 **Chunking comparison.** 3,000 articles indexed per strategy, 1,000 questions. A question is a sentence from an article ("verbatim") or the same sentence with 40 percent of its words removed ("dropout"). A hit means a top-5 chunk from the right article that contains at least 80 percent of the sentence's words.
 
@@ -39,7 +39,7 @@ make eval       # python scripts/compare_chunking.py --docs 3000 --queries 1000
 | semantic (paragraph and sentence) | 12,823 | 0.536 | 0.679 | 0.360 | 0.519 |
 | recursive (LangChain splitter) | 17,725 | 0.554 | 0.707 | 0.350 | 0.503 |
 
-Reruns of this command moved individual numbers by about a point (the embedding model runs on the GPU), and with 1,000 questions differences of a few points are noise. The three strategies are within about 4 points of each other on every measure, so none clearly wins. Semantic gets similar hit rates with 22 percent fewer chunks to embed and store. Many misses are sentences that are not distinctive on their own, such as entries in "year in history" lists.
+Reruns of this command moved individual numbers by about 2 points (the embedding model runs on the GPU), and with 1,000 questions differences of a few points are noise. The three strategies are within about 4 points of each other on every measure, so none clearly wins. Semantic gets similar hit rates with 22 percent fewer chunks to embed and store.
 
 ## How it works
 
@@ -71,6 +71,7 @@ Each document goes through quality checks first: length, share of letters, null 
 Needs Python 3.12 or 3.13. The first run downloads the 90 MB embedding model. No API keys.
 
 ```bash
+python3.13 -m venv .venv && . .venv/bin/activate   # or python3.12
 pip install -r requirements-dev.txt
 make demo
 ```
